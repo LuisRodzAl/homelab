@@ -1,0 +1,170 @@
+name: homelab
+
+networks:
+  homelab:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd00:dead:beef:1::/64
+
+services:
+
+  # =========================================================
+  # PI-HOLE — bloqueador de anuncios/rastreadores a nivel DNS
+  # =========================================================
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    networks:
+      - homelab
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8081:80/tcp"   # UI web de Pi-hole -> http://IP-SERVIDOR:8081/admin
+    environment:
+      TZ: "America/Mexico_City"
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      FTLCONF_dns_upstreams: "1.1.1.1;8.8.8.8"
+      FTLCONF_dns_listeningMode: "ALL"
+    volumes:
+      - ./data/pihole/etc-pihole:/etc/pihole
+      - ./data/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+    cap_add:
+      - NET_ADMIN
+
+  # =========================================================
+  # NGINX PROXY MANAGER — proxy reverso con UI + HTTPS fácil
+  # =========================================================
+  nginx-proxy-manager:
+    container_name: npm
+    image: jc21/nginx-proxy-manager:latest
+    restart: unless-stopped
+    networks:
+      - homelab
+    ports:
+      - "80:80"     # tráfico HTTP normal
+      - "443:443"   # tráfico HTTPS
+      - "8181:81"   # UI de administración -> http://IP-SERVIDOR:8181
+    volumes:
+      - ./data/npm/data:/data
+      - ./data/npm/letsencrypt:/etc/letsencrypt
+
+  # =========================================================
+  # JELLYFIN — servidor de streaming de películas/series
+  # =========================================================
+  jellyfin:
+    container_name: jellyfin
+    image: jellyfin/jellyfin:latest
+    restart: unless-stopped
+    networks:
+      - homelab
+    ports:
+      - "8096:8096"   # UI web -> http://IP-SERVIDOR:8096
+    environment:
+      TZ: "America/Mexico_City"
+    volumes:
+      - ./data/jellyfin/config:/config
+      - ./data/jellyfin/cache:/cache
+      - /home/luis/media/tvshows:/data/tvshows
+      - /home/luis/media/peliculas:/data/movies
+
+    # Si tu i3 tiene GPU integrada (Intel Quick Sync) y quieres
+    # transcodificación acelerada por hardware, descomenta esto:
+    # devices:
+    #   - /dev/dri:/dev/dri
+
+  # =========================================================
+  # PORTAINER — panel de control para todos los contenedores
+  # =========================================================
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce:latest
+    restart: unless-stopped
+    networks:
+      - homelab
+    ports:
+      - "9000:9000"   # UI web -> http://IP-SERVIDOR:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/portainer:/data
+
+  # =========================================================
+  # UPTIME KUMA — monitoreo: te avisa si algo se cae
+  # =========================================================
+  uptime-kuma:
+    container_name: uptime-kuma
+    image: louislam/uptime-kuma:latest
+    restart: unless-stopped
+    networks:
+      - homelab
+    ports:
+      - "3001:3001"   # UI web -> http://IP-SERVIDOR:3001
+    volumes:
+      - ./data/uptime-kuma:/app/data
+
+  # =========================================================
+  # SPEEDTEST TRACKER - monitoreo: hace metricas periodicas de la velocidad del internet
+  # =========================================================
+  speedtest-tracker:
+    container_name: speedtest-tracker
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    restart: unless-stopped
+    networks:
+      - homelab
+    ports:
+      - "8765:80"    # UI web -> http://IP-SERVIDOR:8765
+    environment:
+      TZ: "America/Mexico_City"
+      APP_KEY: "${SPEEDTEST_APP_KEY}"
+      DB_CONNECTION: sqlite
+      SPEEDTEST_SCHEDULE: "0 */1 * * *"   # corre cada hora, ajustable
+    volumes:
+      - ./data/speedtest-tracker:/config
+  # =========================================================
+  # ROMM - entretenimento: emulador de consolas viejas.
+  # =========================================================
+  romm:
+    container_name: romm
+    image: rommapp/romm:latest
+    restart: unless-stopped
+    networks:
+      - homelab
+    ports:
+      - "8766:8080"    # UI web -> http://IP-SERVIDOR:8766
+    environment:
+      TZ: "America/Mexico_City"
+      RETROACHIEVEMENTS_API_KEY: "${RETROACHIEVEMENTS_API_KEY}"
+      IGDB_CLIENT_ID: "${IGDB_CLIENT_ID}"
+      IGDB_CLIENT_SECRET: "${IGDB_CLIENT_SECRET}"
+      ROMM_AUTH_SECRET_KEY: "${ROMM_AUTH_SECRET_KEY}"
+      DB_HOST: romm-db
+      DB_NAME: romm
+      DB_USER: romm
+      DB_PASSWD: ${ROMM_DB_PASSWORD}
+    volumes:
+      - ./data/romm/resources:/romm/resources
+      - ./data/romm/redis-data:/romm/redis-data
+      - /home/luis/media/roms:/romm/library
+      - ./data/romm/assets:/romm/assets
+      - ./data/romm/config:/romm/config
+    depends_on:
+      - romm-db
+
+  romm-db:
+    container_name: romm-db
+    image: mariadb:11
+    restart: unless-stopped
+    networks:
+      - homelab
+    environment:
+      MARIADB_DATABASE: romm
+      MARIADB_USER: romm
+      MARIADB_PASSWORD: ${ROMM_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${ROMM_DB_ROOT_PASSWORD}
+    volumes:
+      - ./data/romm/db:/var/lib/mysql

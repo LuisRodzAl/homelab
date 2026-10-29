@@ -1,0 +1,41 @@
+# ============================================================
+# .gitignore para Homelab
+# ============================================================
+
+# Secretos y variables de entorno reales (JAMÁS subir a Git)
+.env
+.env.*
+!.env.example
+!env.example
+
+# Datos persistentes de los contenedores Docker (bases de datos, configs, certs)
+data/
+data/**
+
+# Carpetas de medios locales y temporales
+media/
+media/**
+
+# Copias de seguridad locales
+*.backup
+*backup*
+*.bak
+*.tar.gz
+*.zip
+
+# Subproyectos y aplicaciones independientes (gestionadas en sus propios repos)
+proyectos/
+proyectos/**
+
+# Logs
+*.log
+logs/
+
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
