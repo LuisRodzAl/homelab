@@ -157,7 +157,7 @@ services:
 
   romm-db:
     container_name: romm-db
-    image: mariadb:11
+    image: mariadb:12
     restart: unless-stopped
     networks:
       - homelab
